@@ -41,6 +41,7 @@ test("createRequest trims input and adds system fields", () => {
     requester: "Jordan Lee",
     department: "Operations",
     equipment: "Laptop",
+    priority: "Normal",
     neededBy: "2026-09-15",
     reason: "Replace a failed field computer.",
     createdAt: "2026-08-17T12:00:00.000Z",
@@ -83,4 +84,50 @@ test("loadRequests safely handles damaged stored data", () => {
   storage.setItem(STORAGE_KEY, "not-json");
 
   assert.deepEqual(loadRequests(storage), []);
+});
+
+test("each priority is preserved when creating and storing requests", () => {
+  const storage = new MemoryStorage();
+  const requests = ["Low", "Normal", "High"].map((priority) =>
+    createRequest({ ...validInput, priority }),
+  );
+
+  assert.deepEqual(requests.map((request) => request.priority), ["Low", "Normal", "High"]);
+  saveRequests(requests, storage);
+  assert.deepEqual(loadRequests(storage), requests);
+});
+
+test("createRequest rejects unsupported priorities", () => {
+  for (const priority of ["Urgent", "", "high", 42]) {
+    assert.throws(
+      () => createRequest({ ...validInput, priority }),
+      (error) => {
+        assert.ok(error instanceof RequestValidationError);
+        assert.deepEqual(error.errors, {
+          priority: "Select Low, Normal, or High priority.",
+        });
+        return true;
+      },
+    );
+  }
+});
+
+test("older requests without priority load as Normal without losing data", () => {
+  const storage = new MemoryStorage();
+  const legacyRequest = {
+    id: "legacy-request",
+    requester: "Jordan Lee",
+    department: "Operations",
+    equipment: "Laptop",
+    neededBy: "2026-09-15",
+    reason: "Replace a failed field computer.",
+    createdAt: "2026-08-17T12:00:00.000Z",
+  };
+  storage.setItem(STORAGE_KEY, JSON.stringify([legacyRequest]));
+
+  const requests = loadRequests(storage);
+  assert.deepEqual(requests, [{ ...legacyRequest, priority: "Normal" }]);
+  assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEY)), [legacyRequest]);
+  saveRequests(requests, storage);
+  assert.deepEqual(loadRequests(storage), requests);
 });
