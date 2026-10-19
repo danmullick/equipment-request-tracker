@@ -103,9 +103,18 @@
           <p id="request-count" class="request-count">0 requests</p>
         </div>
 
+        <div class="field">
+          <label for="priority-filter">Filter by priority</label>
+          <select id="priority-filter">
+            <option selected>All</option>
+            <option>High</option>
+            <option>Normal</option>
+            <option>Low</option>
+          </select>
+        </div>
+
         <div id="empty-state" class="empty-state">
-          <h3>No requests yet</h3>
-          <p>Add the first equipment request using the form.</p>
+          <p>No requests match this priority.</p>
         </div>
 
         <div id="request-table-wrapper" class="table-wrapper" hidden>

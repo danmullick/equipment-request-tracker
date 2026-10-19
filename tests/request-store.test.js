@@ -6,6 +6,7 @@ import {
   STORAGE_KEY,
   appendRequest,
   createRequest,
+  filterRequestsByPriority,
   loadRequests,
   saveRequests,
 } from "../src/request-store.js";
@@ -130,4 +131,57 @@ test("older requests without priority load as Normal without losing data", () =>
   assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEY)), [legacyRequest]);
   saveRequests(requests, storage);
   assert.deepEqual(loadRequests(storage), requests);
+});
+
+test("priority filtering preserves order and ignores status", () => {
+  const requests = [
+    { id: "high-1", priority: "High", status: "Closed" },
+    { id: "low", priority: "Low" },
+    { id: "normal", priority: "Normal" },
+    { id: "high-2", priority: "High", status: "Open" },
+  ];
+  const original = structuredClone(requests);
+
+  assert.deepEqual(filterRequestsByPriority(requests, "All"), original);
+  assert.deepEqual(filterRequestsByPriority(requests, "High").map(({ id }) => id), ["high-1", "high-2"]);
+  assert.deepEqual(filterRequestsByPriority(requests, "Normal").map(({ id }) => id), ["normal"]);
+  assert.deepEqual(filterRequestsByPriority(requests, "Low").map(({ id }) => id), ["low"]);
+  assert.deepEqual(requests, original);
+});
+
+test("priority filtering returns an empty list when nothing matches", () => {
+  assert.deepEqual(filterRequestsByPriority([{ priority: "Low" }], "High"), []);
+  for (const priority of ["All", "High", "Normal", "Low"]) {
+    assert.deepEqual(filterRequestsByPriority([], priority), []);
+  }
+});
+
+test("filtering loaded legacy requests never writes to storage", () => {
+  const storage = new MemoryStorage();
+  const legacyRequest = createRequest(validInput, { id: "legacy" });
+  delete legacyRequest.priority;
+  const stored = JSON.stringify([legacyRequest]);
+  storage.setItem(STORAGE_KEY, stored);
+  const requests = loadRequests(storage);
+
+  for (const priority of ["All", "Normal", "High", "Low", "All"]) {
+    const matches = filterRequestsByPriority(requests, priority);
+    assert.equal(matches.length, ["All", "Normal"].includes(priority) ? 1 : 0);
+    assert.equal(storage.getItem(STORAGE_KEY), stored);
+  }
+  assert.equal(requests[0].priority, "Normal");
+});
+
+test("adding requests while filtering preserves all saved requests", () => {
+  const storage = new MemoryStorage();
+  let requests = [createRequest({ ...validInput, priority: "Low" }, { id: "old" })];
+  const oldRequest = structuredClone(requests[0]);
+  for (const [id, priority] of [["matching", "High"], ["nonmatching", "Normal"]]) {
+    requests = appendRequest(requests, createRequest({ ...validInput, priority }, { id }));
+    saveRequests(requests, storage);
+    assert.deepEqual(filterRequestsByPriority(requests, "High").map(({ id }) => id), ["matching"]);
+  }
+  assert.deepEqual(loadRequests(storage), requests);
+  assert.deepEqual(filterRequestsByPriority(requests, "All").map(({ id }) => id), ["nonmatching", "matching", "old"]);
+  assert.deepEqual(requests[2], oldRequest);
 });
